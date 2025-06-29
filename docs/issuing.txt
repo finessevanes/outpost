@@ -1,0 +1,390 @@
+# Credential Issuance
+
+Reference: [GitHub Repo](https://github.com/MocaNetwork/air-credential-example)
+
+---
+
+### Import styles
+
+To ensure the widget displays correctly, import the SDK’s CSS file early in your application:
+
+```
+import '@mocanetwork/air-credential-sdk/dist/style.css'
+```
+
+### Component: `CredentialIssuance`
+
+This is a functional React component that provides a UI and logic for issuing verifiable credentials using the AIR Credential SDK.
+
+---
+
+### **State Management**
+
+```tsx
+const [isLoading, setIsLoading] = useState(false);
+const [isSuccess, setIsSuccess] = useState(false);
+const [error, setError] = useState<string | null>(null);
+
+```
+
+- **`isLoading`**: Tracks if a credential issuance operation is currently in progress.
+- **`isSuccess`**: Tracks whether the credential issuance was successful.
+- **`error`**: Stores any error messages if credential issuance fails.
+
+---
+
+### **Widget Reference**
+
+```tsx
+const widgetRef = useRef<AirCredentialWidget | null>(null);
+
+```
+
+- Maintains a reference to the AIR Credential widget instance, allowing programmatic access to its methods (like `issueCredential()`).
+
+---
+
+### **Configuration Setup**
+
+```tsx
+const [config, setConfig] = useState({
+  issuerDid: import.meta.env.VITE_ISSUER_DID || "did:example:issuer123",
+  issuerAuth: import.meta.env.VITE_ISSUER_AUTH_TOKEN || "your-issuer-auth-token",
+  credentialId: import.meta.env.VITE_CREDENTIAL_ID || "credential-type-123",
+  redirectUrlForIssuer: import.meta.env.VITE_REDIRECT_URL_FOR_ISSUER || "",
+});
+
+```
+
+- Stores configuration values like the issuer DID, auth token, credential type ID, branding info, etc.
+- Values are pulled from environment variables or fallback to defaults (useful for local development).
+
+---
+
+### **Credential Subject Fields**
+
+```tsx
+const [credentialFields, setCredentialFields] = useState<CredentialField[]>([
+  {
+    id: "1",
+    name: "name",
+    type: "string",
+    value: "",
+  },
+]);
+
+```
+
+- Maintains a dynamic list of fields that make up the credential subject (e.g., name, date, etc.).
+- Each field has an `id`, `name`, `type`, and `value`.
+
+---
+
+### **Utility Functions for Config and Fields**
+
+### Update Config
+
+```tsx
+const handleConfigChange = (field: string, value: string) => {
+  setConfig((prev) => ({ ...prev, [field]: value }));
+};
+
+```
+
+- Dynamically updates a single field in the config object.
+
+### Add New Field
+
+```tsx
+const addCredentialField = () => {
+  const newField: CredentialField = {
+    id: Date.now().toString(),
+    name: "",
+    type: "string",
+    value: "",
+  };
+  setCredentialFields([...credentialFields, newField]);
+};
+
+```
+
+- Adds a new empty field to the credential subject fields array.
+
+### Update Field
+
+```tsx
+const updateCredentialField = (id: string, field: Partial<CredentialField>) => {
+  setCredentialFields(credentialFields.map((f) => (f.id === id ? { ...f, ...field } : f)));
+};
+
+```
+
+- Updates specific properties (like `name`, `type`, or `value`) of a credential field identified by its `id`.
+
+### Remove Field
+
+```tsx
+const removeCredentialField = (id: string) => {
+  setCredentialFields(credentialFields.filter((f) => f.id !== id));
+};
+
+```
+
+- Removes a credential field based on its `id`.
+
+---
+
+Define the credential subject according to your dashboard's scheme and construct the claim request.
+
+### **Field Conversion for Credential Subject**
+
+```tsx
+const convertFieldsToCredentialSubject = (): JsonDocumentObject => {
+  const subject: JsonDocumentObject = {};
+  credentialFields.forEach((field) => {
+    if (field.name.trim()) {
+      let value: string | number | boolean = field.value;
+
+      switch (field.type) {
+        case "number":
+          value = typeof field.value === "string" ? parseFloat(field.value) || 0 : field.value;
+          break;
+        case "boolean":
+          value = typeof field.value === "string" ? field.value === "true" : field.value;
+          break;
+        case "date":
+          if (typeof field.value === "string") {
+            const date = new Date(field.value);
+            if (!isNaN(date.getTime())) {
+              value = parseInt(
+                date.getFullYear().toString() +
+                (date.getMonth() + 1).toString().padStart(2, "0") +
+                date.getDate().toString().padStart(2, "0")
+              );
+            }
+          }
+          break;
+        default:
+          value = field.value;
+      }
+
+      subject[field.name] = value;
+    }
+  });
+  return subject;
+};
+
+```
+
+- Converts the `credentialFields` array into a structured object (`credentialSubject`) suitable for issuing a credential.
+- Handles type coercion based on user-defined field types:
+    - **number**: converts strings to numbers.
+    - **boolean**: interprets "true"/"false" strings.
+    - **date**: converts to a `YYYYMMDD` integer format.
+- Skips fields with empty names.
+
+---
+
+# Preparation
+
+## Retrieve Credential Auth Token from API Key
+
+```tsx
+const getVerifierAuthToken = async (verifierDid: string, apiKey: string, apiUrl: string): Promise<string | null> => {
+  try {
+    const response = await fetch(`${apiUrl}/verifier/login`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        accept: "*/*",
+        "X-Test": "true",
+      },
+      body: JSON.stringify({
+        verifierDid: verifierDid,
+        authToken: apiKey,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`API call failed with status: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    if (data.code === 80000000 && data.data && data.data.token) {
+      return data.data.token;
+    } else {
+      console.error("Failed to get verifier auth token from API:", data.msg || "Unknown error");
+      return null;
+    }
+  } catch (error) {
+    console.error("Error fetching verifier auth token:", error);
+    return null;
+  }
+};
+```
+
+---
+
+## Retrieve Cross Partner Token
+
+```tsx
+
+      const rp = await airService?.goToPartner(environmentConfig.widgetUrl).catch((err) => {
+        console.error("Error getting URL with token:", err);
+      });
+```
+
+---
+
+### 
+
+`generateWidget` – Initializes the AIR Credential Widget
+
+```tsx
+const generateWidget = async () => {
+  try {
+    const credentialSubject = convertFieldsToCredentialSubject();
+
+```
+
+- First, convert the credential field inputs into a properly structured `credentialSubject` object using your helper function.
+
+---
+
+```tsx
+    const claimRequest: ClaimRequest = {
+      process: "Issue",
+      issuerDid: config.issuerDid,
+      issuerAuth: config.issuerAuth,
+      credentialId: config.credentialId,
+      credentialSubject: credentialSubject,
+    };
+
+```
+
+- Constructs a `ClaimRequest` object required by the AIR widget to initiate a credential issuance flow.
+
+---
+
+```tsx
+widgetRef.current = new AirCredentialWidget(claimRequest, partnerId, {
+        endpoint: rp?.urlWithToken,
+        airKitBuildEnv: airKitBuildEnv || BUILD_ENV.SANDBOX,
+        theme: "light", // currently only have light theme
+        locale: LOCALE as Language,
+      });
+```
+
+- Instantiates the **`AirCredentialWidget`** with the claim request and config options (like theme, locale, endpoint, etc.)
+- Assigns it to `widgetRef` so it can be reused later.
+
+---
+
+```tsx
+    widgetRef.current.on("issueCompleted", () => {
+      setIsSuccess(true);
+      setIsLoading(false);
+      console.log("Credential issuance completed successfully!");
+    });
+
+```
+
+- Subscribes to the `issueCompleted` event to update the UI and internal state when credential issuance succeeds.
+
+---
+
+```tsx
+    widgetRef.current.on("close", () => {
+      setIsLoading(false);
+      console.log("Widget closed");
+    });
+
+```
+
+- Subscribes to the `close` event, triggered when the user manually closes the widget, ensuring the loading state is reset.
+
+---
+
+```tsx
+  } catch (err) {
+    setError(err instanceof Error ? err.message : "Failed to create widget");
+    setIsLoading(false);
+  }
+};
+
+```
+
+- Gracefully handles any errors that occur during widget setup and updates the `error` state.
+
+---
+
+### `handleIssueCredential` – Triggers the Issuance Flow
+
+```tsx
+const handleIssueCredential = async () => {
+  setIsLoading(true);
+  setError(null);
+  setIsSuccess(false);
+
+```
+
+- Prepares UI state for a new issuance attempt by resetting success/error flags and activating the loading indicator.
+
+---
+
+```tsx
+  try {
+    if (!widgetRef.current) {
+      await generateWidget();  // Generate the widget if it's not already created
+    }
+
+    if (widgetRef.current) {
+      widgetRef.current.launch();  // Launch the widget UI for user interaction
+    }
+  } catch (err) {
+    setError(err instanceof Error ? err.message : "An error occurred");
+    setIsLoading(false);
+  }
+};
+
+```
+
+- Ensures the widget is initialized before launching it.
+- Handles any errors during launch and updates the UI accordingly.
+
+---
+
+### `handleReset` – Resets the State and Cleans Up the Widget
+
+```tsx
+const handleReset = () => {
+  setIsSuccess(false);
+  setError(null);
+  if (widgetRef.current) {
+    widgetRef.current.destroy();  // Cleanup widget instance
+    widgetRef.current = null;
+  }
+};
+
+```
+
+- Resets internal success and error states.
+- Destroys the current widget instance to allow a fresh start.
+
+---
+
+### 🧹 `useEffect` – Cleanup on Component Unmount
+
+```tsx
+useEffect(() => {
+  return () => {
+    if (widgetRef.current) {
+      widgetRef.current.destroy();  // Prevent memory leaks
+    }
+  };
+}, []);
+
+```
+
+- React hook to ensure the widget is destroyed when the component is unmounted, avoiding resource leaks or stale listeners.
