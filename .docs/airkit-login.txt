@@ -1,0 +1,102 @@
+🔐 AIR Kit Account SDK — Developer Onboarding Guide
+Welcome!
+This guide walks you through integrating Moca Network’s Account SDK to enable seamless SSO login (Single Sign-On) into your DApp.
+Overview
+
+Email Login: Simple authentication via Moca Single Sign On.
+MPC Wallet: Automatically generated and linked to email, acts as the authorized signer for the user's AIR Account
+Smart Contract Wallet: The MPC Wallet is linked to an Account Abstraction (AA) wallet that securely holds on-chain assets
+AIR Credentials:
+With an AIR Account, users can unlock access to on-chain verifiable credentials that are stored directly in the user’s AIR Account
+✅ Step 1: Install the SDK
+npm install @mocanetwork/airkit
+​
+You can also use the Sandbox environment, which comes preloaded with the Moca SDKs - you can skip this step
+
+🔧 Step 2: Get Your partner ID
+Find the partner ID assigned for your team here 
+If you’re looking to customise the login flow, please submit your request through this form.
+you can customise the following parameters:
+
+Customisation
+Chain ID
+Custom Styling Config 
+CSS File
+Localisation support (if applicable)
+language file
+🔧 Step 3: Import and Initialize
+import { AirService, BUILD_ENV } from "@mocanetwork/airkit";
+
+const service = new AirService({
+  partnerId: YOUR_PARTNER_ID, // Replace with your actual Partner ID
+  env: BUILD_ENV.SANDBOX
+});
+
+​
+🚀 Step 4: Trigger the Login Flow
+await service.init();
+const loggedInResult = await service.login();
+​
+☑️ This will:
+Create a secure iframe for the login UI
+Handle authentication and session setup
+Enable safe communication between your app and the login interface
+📦 What You Get After Login
+Once the login is complete, you’ll have access to:
+🆔 User UUID
+🔐 Session token/access metadata
+🪪 Verified identity context (for credentialing and permissions)
+What’s Next?
+➕ Add credential issuing and proof verification using the Credential SDK
+🧑‍💻 Use this as a base for permission-gated features and custom user journeys
+Looking to Customize the Flow?
+You can personalize the login experience with theming, callbacks, and optional behaviors.
+Custom Options:
+Brand colors and logo
+Language/localization
+Event listeners
+✍️ Example: Add Event Listeners
+service.on((data: AirEventData) => {
+	switch(data.event) {
+		case "logged_in":
+			// user logged in
+			break;
+		case ...
+	}
+});
+
+# Class
+class AirService {
+    constructor({ partnerId }: {
+        partnerId: string;
+        modalZIndex?: number;
+    });
+    get buildEnv(): BUILD_ENV_TYPE; // available env: SANDBOX
+    get isInitialized(): boolean;
+    get isLoggedIn(): boolean;
+    get isWalletInitialized(): boolean;
+    get provider(): EIP1193Provider;
+    init({ buildEnv, enableLogging, skipRehydration, }: {
+        buildEnv: BUILD_ENV_TYPE;
+        enableLogging: boolean;
+        skipRehydration: boolean;
+    }): Promise<AirLoginResult | null>;
+    login(options?: {
+        authToken?: string;
+    }): Promise<AirLoginResult>;
+    isSmartAccountDeployed(): Promise<boolean>;
+    deploySmartAccount(): Promise<{ txHash: string; }>;
+    getCredentialSalt(): Promise<{ credentialSalt: string; }>;
+    getProvider(): EIP1193Provider;
+    preloadWallet(): Promise<void>;
+    setupOrUpdateMfa(): Promise<void>;
+    claimAirId(options?: ClaimAirIdOptions): Promise<ClaimAirIdResult>;
+    getUserInfo(): Promise<AirUserDetails>;
+    goToPartner(partnerUrl: string): Promise<{ urlWithToken: string; }>;
+    getAccessToken(): Promise<{ token: string; }>;
+    logout(): Promise<void>;
+    cleanUp(): Promise<void>;
+    on(listener: AirEventListener): void;
+    off(listener: AirEventListener): void;
+    clearEventListeners(): void;
+}
