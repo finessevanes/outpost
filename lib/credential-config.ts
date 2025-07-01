@@ -19,6 +19,6 @@ export const ENVIRONMENT_CONFIGS: Record<string, EnvironmentConfig> = {
 export const CREDENTIAL_CONFIG = {
   verifierDid: process.env.NEXT_PUBLIC_VERIFIER_DID || '',
   apiKey: process.env.NEXT_PUBLIC_VERIFIER_API_KEY || '',
-  credentialId: process.env.NEXT_PUBLIC_CREDENTIAL_ID || '',
+  credentialId: process.env.NEXT_PUBLIC_CREDENTIAL_ID_GENDER || '',
   programId: process.env.NEXT_PUBLIC_PROGRAM_ID || '',
 }; 

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ReviewModal } from './review-modal';
 
 interface MapPin {
   id: number;
@@ -9,58 +10,70 @@ interface MapPin {
   rating: number;
   description: string;
   reports: number;
+  price: string;
+  type: 'hotel' | 'hostel' | 'guesthouse';
 }
 
 const mockMapData: MapPin[] = [
   {
     id: 1,
-    lat: 40.7128,
-    lng: -74.0060,
-    title: "Washington Square Park",
-    category: 'safe',
-    rating: 4.5,
-    description: "Well-lit area, good for evening walks",
-    reports: 12
+    lat: -8.6544,
+    lng: 115.1311,
+    title: "FRii Bali Echo Beach Hotel",
+    category: 'recommend',
+    rating: 4.7,
+    description: "Beachfront hotel with stunning sunset views, perfect for solo travelers",
+    reports: 34,
+    price: "$85/night",
+    type: 'hotel'
   },
   {
     id: 2,
-    lat: 40.7589,
-    lng: -73.9851,
-    title: "Central Park East",
-    category: 'recommend',
-    rating: 4.8,
-    description: "Great for morning runs, active community",
-    reports: 28
+    lat: -8.6580,
+    lng: 115.1250,
+    title: "The Lawn Canggu",
+    category: 'safe',
+    rating: 4.5,
+    description: "Trendy beachside hotel with pool, great for digital nomads",
+    reports: 28,
+    price: "$120/night",
+    type: 'hotel'
   },
   {
     id: 3,
-    lat: 40.7505,
-    lng: -73.9934,
-    title: "Times Square Area",
-    category: 'caution',
-    rating: 3.2,
-    description: "Crowded, watch belongings",
-    reports: 45
+    lat: -8.6501,
+    lng: 115.1365,
+    title: "Mad Monkey Hostel Canggu",
+    category: 'recommend',
+    rating: 4.3,
+    description: "Social hostel with rooftop bar, perfect for meeting other travelers",
+    reports: 52,
+    price: "$25/night",
+    type: 'hostel'
   },
   {
     id: 4,
-    lat: 40.7282,
-    lng: -73.7949,
-    title: "Flushing Meadows",
+    lat: -8.6495,
+    lng: 115.1358,
+    title: "Koa D'Surfer Hotel",
     category: 'safe',
-    rating: 4.3,
-    description: "Family-friendly, well-maintained",
-    reports: 8
+    rating: 4.4,
+    description: "Surf-themed hotel near beach, great vibes and friendly staff",
+    reports: 19,
+    price: "$75/night",
+    type: 'hotel'
   },
   {
     id: 5,
-    lat: 40.6892,
-    lng: -74.0445,
-    title: "Brooklyn Bridge Park",
-    category: 'recommend',
-    rating: 4.7,
-    description: "Beautiful views, safe for solo visits",
-    reports: 22
+    lat: -8.6507,
+    lng: 115.1371,
+    title: "Puri Garden Hotel & Hostel",
+    category: 'caution',
+    rating: 4.1,
+    description: "Budget-friendly with garden setting, can get noisy at night",
+    reports: 15,
+    price: "$35/night",
+    type: 'guesthouse'
   }
 ];
 
@@ -85,19 +98,49 @@ const getCategoryEmoji = (category: string) => {
 };
 
 export function HoodMap() {
-  const [selectedPin, setSelectedPin] = useState<MapPin | null>(null);
   const [activeCategory, setActiveCategory] = useState<string>('all');
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [reviewingPin, setReviewingPin] = useState<MapPin | null>(null);
+  const [verifiedHotels, setVerifiedHotels] = useState<Set<number>>(new Set());
 
   const filteredPins = activeCategory === 'all' 
     ? mockMapData 
     : mockMapData.filter(pin => pin.category === activeCategory);
 
+  const handleReviewClick = (pin: MapPin) => {
+    setReviewingPin(pin);
+    setReviewModalOpen(true);
+    console.log(`📱 Opening review modal for ${pin.title}`);
+  };
+
+  const handleReviewSubmit = (reviewData: { image: File; travelType: string; location?: any }) => {
+    console.log('📸 Review submitted:', {
+      hotel: reviewingPin?.title,
+      travelType: reviewData.travelType,
+      hasImage: !!reviewData.image,
+      locationVerified: !!reviewData.location
+    });
+    
+    // TODO: Phase 3 - Trigger credential issuance here
+    
+    // Mark this hotel as verified
+    if (reviewingPin) {
+      setVerifiedHotels(prev => new Set(Array.from(prev).concat(reviewingPin.id)));
+    }
+    
+    setReviewModalOpen(false);
+    setReviewingPin(null);
+    
+    // Show success message (temporary)
+    alert(`✅ Review submitted for ${reviewingPin?.title}! You'll now see "You stayed here!" badge. Credential issuance coming in Phase 3.`);
+  };
+
   return (
     <div className="bg-gray-900 text-white rounded-lg overflow-hidden animate-in fade-in-0 slide-in-from-bottom-4 duration-500">
       {/* Header */}
       <div className="p-4 bg-gray-800 border-b border-gray-700">
-        <h2 className="text-xl font-bold mb-2">HoodMap</h2>
-        <p className="text-gray-300 text-sm">Community-verified safe spaces</p>
+        <h2 className="text-xl font-bold mb-2">🏝️ Canggu Hostels</h2>
+        <p className="text-gray-300 text-sm">Verified stays by the community</p>
       </div>
 
       {/* Filter Tabs */}
@@ -117,89 +160,89 @@ export function HoodMap() {
         ))}
       </div>
 
-      {/* Map Area */}
-      <div className="relative h-80 bg-gray-800 overflow-hidden">
-        {/* Mock Map Background */}
-        <div className="absolute inset-0 bg-gradient-to-br from-gray-700 to-gray-900">
-          <div className="absolute inset-0 opacity-10">
-            <svg className="w-full h-full" viewBox="0 0 400 320">
-              {/* Mock street lines */}
-              <line x1="0" y1="160" x2="400" y2="160" stroke="#374151" strokeWidth="2"/>
-              <line x1="200" y1="0" x2="200" y2="320" stroke="#374151" strokeWidth="2"/>
-              <line x1="100" y1="0" x2="100" y2="320" stroke="#374151" strokeWidth="1"/>
-              <line x1="300" y1="0" x2="300" y2="320" stroke="#374151" strokeWidth="1"/>
-              <line x1="0" y1="80" x2="400" y2="80" stroke="#374151" strokeWidth="1"/>
-              <line x1="0" y1="240" x2="400" y2="240" stroke="#374151" strokeWidth="1"/>
-            </svg>
-          </div>
-        </div>
-
-        {/* Map Pins */}
+      {/* Hotel List */}
+      <div className="space-y-3">
         {filteredPins.map((pin) => (
           <div
             key={pin.id}
-            className="absolute transform -translate-x-1/2 -translate-y-1/2 cursor-pointer transition-transform hover:scale-110"
-            style={{
-              left: `${((pin.lng + 74.1) * 200) % 100}%`,
-              top: `${((pin.lat - 40.7) * 400) % 100}%`,
-            }}
-            onClick={() => setSelectedPin(selectedPin?.id === pin.id ? null : pin)}
+            className="bg-gray-800 border border-gray-700 rounded-lg p-4 hover:bg-gray-750 transition-colors"
           >
-            <div 
-              className="w-6 h-6 rounded-full border-2 border-white shadow-lg flex items-center justify-center text-xs"
-              style={{ backgroundColor: getCategoryColor(pin.category) }}
-            >
-              {getCategoryEmoji(pin.category)}
+            <div className="flex items-start justify-between mb-3">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-lg">{getCategoryEmoji(pin.category)}</span>
+                  <h3 className="font-semibold text-lg text-white">{pin.title}</h3>
+                  {verifiedHotels.has(pin.id) && (
+                    <span className="bg-blue-600 text-white text-xs px-2 py-1 rounded-full">
+                      You stayed here!
+                    </span>
+                  )}
+                </div>
+                
+                <div className="flex items-center gap-4 mb-2">
+                  <span className="text-green-400 font-semibold">{pin.price}</span>
+                  <span className="capitalize text-sm font-medium" style={{ color: getCategoryColor(pin.category) }}>
+                    {pin.category}
+                  </span>
+                  <span className="text-yellow-400">★ {pin.rating}</span>
+                  <span className="text-gray-400 text-sm">({pin.reports} reviews)</span>
+                  <span className="text-gray-400 text-sm capitalize">• {pin.type}</span>
+                </div>
+                
+                <p className="text-gray-300 text-sm mb-3">{pin.description}</p>
+              </div>
             </div>
+            
+            <button 
+              className={`w-full py-2 px-4 rounded-lg transition-colors text-sm font-medium ${
+                verifiedHotels.has(pin.id) 
+                  ? 'bg-green-600 hover:bg-green-700 text-white' 
+                  : 'bg-blue-600 hover:bg-blue-700 text-white'
+              }`}
+              onClick={() => handleReviewClick(pin)}
+            >
+              {verifiedHotels.has(pin.id) ? '✅ Add Another Review' : '📸 Leave a Review'}
+            </button>
           </div>
         ))}
-
-        {/* Selected Pin Details */}
-        {selectedPin && (
-          <div className="absolute bottom-4 left-4 right-4 bg-gray-800 border border-gray-600 rounded-lg p-4 shadow-xl">
-            <div className="flex items-start justify-between mb-2">
-              <h3 className="font-semibold text-lg">{selectedPin.title}</h3>
-              <button
-                onClick={() => setSelectedPin(null)}
-                className="text-gray-400 hover:text-white"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-2xl">{getCategoryEmoji(selectedPin.category)}</span>
-              <span className="capitalize text-sm font-medium" style={{ color: getCategoryColor(selectedPin.category) }}>
-                {selectedPin.category}
-              </span>
-              <span className="text-yellow-400">★ {selectedPin.rating}</span>
-              <span className="text-gray-400 text-sm">({selectedPin.reports} reports)</span>
-            </div>
-            <p className="text-gray-300 text-sm">{selectedPin.description}</p>
-          </div>
-        )}
       </div>
 
       {/* Stats Footer */}
       <div className="p-4 bg-gray-800 border-t border-gray-700">
         <div className="grid grid-cols-4 gap-4 text-center">
           <div>
-            <div className="text-green-400 font-bold text-lg">{mockMapData.filter(p => p.category === 'safe').length}</div>
-            <div className="text-gray-400 text-xs">Safe Spots</div>
+            <div className="text-green-400 font-bold text-lg">{mockMapData.filter(p => p.type === 'hotel').length}</div>
+            <div className="text-gray-400 text-xs">Hotels</div>
           </div>
           <div>
-            <div className="text-blue-400 font-bold text-lg">{mockMapData.filter(p => p.category === 'recommend').length}</div>
-            <div className="text-gray-400 text-xs">Recommended</div>
+            <div className="text-blue-400 font-bold text-lg">{mockMapData.filter(p => p.type === 'hostel').length}</div>
+            <div className="text-gray-400 text-xs">Hostels</div>
           </div>
           <div>
-            <div className="text-yellow-400 font-bold text-lg">{mockMapData.filter(p => p.category === 'caution').length}</div>
-            <div className="text-gray-400 text-xs">Caution</div>
+            <div className="text-yellow-400 font-bold text-lg">{mockMapData.filter(p => p.category === 'recommend').length}</div>
+            <div className="text-gray-400 text-xs">Top Rated</div>
           </div>
           <div>
             <div className="text-indigo-400 font-bold text-lg">{mockMapData.reduce((sum, p) => sum + p.reports, 0)}</div>
-            <div className="text-gray-400 text-xs">Total Reports</div>
+            <div className="text-gray-400 text-xs">Total Reviews</div>
           </div>
         </div>
       </div>
+
+      {/* Review Modal */}
+      {reviewingPin && (
+        <ReviewModal
+          isOpen={reviewModalOpen}
+          onClose={() => {
+            setReviewModalOpen(false);
+            setReviewingPin(null);
+          }}
+          hotelName={reviewingPin.title}
+          hotelId={reviewingPin.id}
+          hotelCoordinates={{ lat: reviewingPin.lat, lng: reviewingPin.lng }}
+          onSubmitReview={handleReviewSubmit}
+        />
+      )}
     </div>
   );
 } 

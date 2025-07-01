@@ -21,7 +21,7 @@ NEXT_PUBLIC_AIR_PARTNER_ID=your_partner_id_here
 # Credential Verification Configuration
 NEXT_PUBLIC_VERIFIER_DID=your_verifier_did_here
 NEXT_PUBLIC_VERIFIER_API_KEY=your_verifier_api_key_here
-NEXT_PUBLIC_CREDENTIAL_ID=your_credential_id_here
+NEXT_PUBLIC_CREDENTIAL_ID_GENDER=your_credential_id_here
 NEXT_PUBLIC_PROGRAM_ID=your_program_id_here
 ```
 

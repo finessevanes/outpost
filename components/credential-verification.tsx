@@ -13,6 +13,21 @@ export function CredentialVerification() {
   const [error, setError] = useState<string | null>(null);
   const widgetRef = useRef<AirCredentialWidget | null>(null);
 
+  // Load saved verification from localStorage on mount
+  useEffect(() => {
+    const savedVerification = localStorage.getItem('airkit-verification-result');
+    if (savedVerification) {
+      try {
+        const parsed = JSON.parse(savedVerification);
+        setVerificationResult(parsed);
+        console.log('🔄 Loaded saved verification from localStorage:', parsed);
+      } catch (error) {
+        console.error('Failed to parse saved verification:', error);
+        localStorage.removeItem('airkit-verification-result');
+      }
+    }
+  }, []);
+
   const getVerifierAuthToken = async (verifierDid: string, apiKey: string, apiUrl: string): Promise<string | null> => {
     try {
       const response = await fetch(`${apiUrl}/verifier/login`, {
@@ -92,7 +107,10 @@ export function CredentialVerification() {
       widgetRef.current.on("verifyCompleted", (results: VerificationResults) => {
         setVerificationResult(results);
         setIsLoading(false);
-        console.log("✅ Verification completed:", results);
+        
+        // Save verification result to localStorage for persistence
+        localStorage.setItem('airkit-verification-result', JSON.stringify(results));
+        console.log("✅ Verification completed and saved:", results);
       });
 
       widgetRef.current.on("close", () => {
@@ -119,6 +137,17 @@ export function CredentialVerification() {
     console.log("🔄 Verification reset");
   };
 
+  const clearCredentials = () => {
+    localStorage.removeItem('airkit-verification-result');
+    setVerificationResult(null);
+    setError(null);
+    if (widgetRef.current) {
+      widgetRef.current.destroy();
+      widgetRef.current = null;
+    }
+    console.log("🗑️ All credentials cleared from localStorage");
+  };
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -130,7 +159,7 @@ export function CredentialVerification() {
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-4">
+      <div className="flex gap-3 flex-wrap">
         <Button 
           onClick={handleVerifyCredential} 
           disabled={isLoading}
@@ -148,7 +177,24 @@ export function CredentialVerification() {
             Reset
           </Button>
         )}
+
+        {verificationResult && (
+          <Button 
+            onClick={clearCredentials} 
+            variant="destructive"
+            className="px-6 py-2 text-sm"
+          >
+            🗑️ Clear VCs
+          </Button>
+        )}
       </div>
+
+      {/* Show if credentials are loaded from storage */}
+      {verificationResult && !isLoading && !error && (
+        <div className="text-xs text-gray-500 bg-gray-50 px-3 py-2 rounded border">
+          💾 Credentials loaded from previous session
+        </div>
+      )}
 
       {error && (
         <div className="p-4 bg-red-50 border border-red-200 rounded-md">
