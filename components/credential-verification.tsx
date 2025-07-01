@@ -21,6 +21,12 @@ export function CredentialVerification() {
         const parsed = JSON.parse(savedVerification);
         setVerificationResult(parsed);
         console.log('🔄 Loaded saved verification from localStorage:', parsed);
+        console.log('🔍 Saved verification structure check:', {
+          status: parsed?.status,
+          dataVerified: parsed?.data?.verified,
+          verifications: parsed?.verifications,
+          credentials: parsed?.credentials
+        });
       } catch (error) {
         console.error('Failed to parse saved verification:', error);
         localStorage.removeItem('airkit-verification-result');
@@ -67,8 +73,18 @@ export function CredentialVerification() {
     setVerificationResult(null);
 
     try {
+      // Debug: Log configuration
+      console.log('🔧 Starting gender verification with config:', {
+        verifierDid: CREDENTIAL_CONFIG.verifierDid,
+        partnerId: CREDENTIAL_CONFIG.partnerId,
+        programId: CREDENTIAL_CONFIG.programId,
+        verificationCredentialId: CREDENTIAL_CONFIG.verificationCredentialId,
+        hasApiKey: !!CREDENTIAL_CONFIG.verifierApiKey
+      });
+
       // Get environment config
       const environmentConfig = ENVIRONMENT_CONFIGS[BUILD_ENV.SANDBOX];
+      console.log('🔧 Environment config:', environmentConfig);
       
       // Get verifier auth token
       const fetchedVerifierAuthToken = await getVerifierAuthToken(
@@ -95,7 +111,7 @@ export function CredentialVerification() {
       };
 
       // Create and configure the widget
-      widgetRef.current = new AirCredentialWidget(queryRequest, CREDENTIAL_CONFIG.verifierDid, {
+      widgetRef.current = new AirCredentialWidget(queryRequest, CREDENTIAL_CONFIG.partnerId, {
         endpoint: rp?.urlWithToken,
         airKitBuildEnv: BUILD_ENV.SANDBOX,
         theme: "light",
@@ -111,6 +127,13 @@ export function CredentialVerification() {
         // Save verification result to localStorage for persistence
         localStorage.setItem('airkit-verification-result', JSON.stringify(results));
         console.log("✅ Verification completed and saved:", results);
+        
+        // Debug: Log the full structure to understand what we're getting
+        console.log("🔍 Full verification result structure:", JSON.stringify(results, null, 2));
+        console.log("🔍 Result status:", (results as any)?.status);
+        console.log("🔍 Result data:", (results as any)?.data);
+        console.log("🔍 Verifications:", (results as any)?.verifications);
+        console.log("🔍 Credentials:", (results as any)?.credentials);
       });
 
       widgetRef.current.on("close", () => {
@@ -205,32 +228,51 @@ export function CredentialVerification() {
 
       {verificationResult && (
         <div>
-          {/* Check if user is verified as a woman (Compliant status) */}
-          {(verificationResult as any)?.status === "Compliant" ? (
-            <div className="space-y-4">
-              <div className="p-4 bg-green-50 border border-green-200 rounded-md">
-                <p className="text-green-800 font-medium mb-1">✅ Verification Complete</p>
-                <p className="text-green-700 text-sm">Welcome to the community! Access granted to HoodMap.</p>
+          {(() => {
+            const result = verificationResult as any;
+            
+            // Check for gender verification specifically
+            const isGenderVerified = 
+              result?.status === "Compliant" || 
+              result?.status === "verified" ||
+              result?.data?.verified === true ||
+              (result?.verifications && Object.values(result.verifications).some((v: any) => v?.verified === true)) ||
+              (result?.credentials && Object.values(result.credentials).some((c: any) => c?.verified === true || c?.status === "verified"));
+            
+            console.log("🔍 Gender verification check:", {
+              status: result?.status,
+              dataVerified: result?.data?.verified,
+              verifications: result?.verifications,
+              credentials: result?.credentials,
+              isGenderVerified
+            });
+
+            return isGenderVerified ? (
+              <div className="space-y-4">
+                <div className="p-4 bg-green-50 border border-green-200 rounded-md">
+                  <p className="text-green-800 font-medium mb-1">✅ Gender Verification Complete</p>
+                  <p className="text-green-700 text-sm">Welcome to the community! Access granted to HoodMap.</p>
+                </div>
+                <HoodMap />
               </div>
-              <HoodMap />
-            </div>
-          ) : (
-            <div className="p-4 bg-green-50 border border-green-200 rounded-md">
-              <p className="text-green-800 font-medium mb-2">✅ Verification Complete</p>
-              <div className="text-sm space-y-1">
-                <p><span className="font-medium">Status:</span> Verification completed successfully</p>
-                <p><span className="font-medium">Results:</span> Check console for detailed output</p>
+            ) : (
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-md">
+                <p className="text-amber-800 font-medium mb-2">⚠️ Verification Incomplete</p>
+                <div className="text-sm space-y-2">
+                  <p><span className="font-medium">Status:</span> {result?.status || 'Unknown'}</p>
+                  <p className="text-amber-700">Gender verification could not be confirmed. Please try again or check console for details.</p>
+                </div>
+                <details className="mt-3">
+                  <summary className="cursor-pointer text-xs text-gray-600 hover:text-gray-800">
+                    Show debug info
+                  </summary>
+                  <pre className="text-xs bg-white p-2 rounded border overflow-auto mt-2 max-h-40">
+                    {JSON.stringify(verificationResult, null, 2)}
+                  </pre>
+                </details>
               </div>
-              <details className="mt-3">
-                <summary className="cursor-pointer text-xs text-gray-600 hover:text-gray-800">
-                  Show raw results
-                </summary>
-                <pre className="text-xs bg-white p-2 rounded border overflow-auto mt-2 max-h-40">
-                  {JSON.stringify(verificationResult, null, 2)}
-                </pre>
-              </details>
-            </div>
-          )}
+            );
+          })()}
         </div>
       )}
     </div>
