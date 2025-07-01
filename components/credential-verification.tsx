@@ -73,7 +73,7 @@ export function CredentialVerification() {
       // Get verifier auth token
       const fetchedVerifierAuthToken = await getVerifierAuthToken(
         CREDENTIAL_CONFIG.verifierDid,
-        CREDENTIAL_CONFIG.apiKey,
+        CREDENTIAL_CONFIG.verifierApiKey,
         environmentConfig.apiUrl
       );
 

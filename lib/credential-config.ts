@@ -17,8 +17,14 @@ export const ENVIRONMENT_CONFIGS: Record<string, EnvironmentConfig> = {
 };
 
 export const CREDENTIAL_CONFIG = {
+  // Verification config
   verifierDid: process.env.NEXT_PUBLIC_VERIFIER_DID || '',
-  apiKey: process.env.NEXT_PUBLIC_VERIFIER_API_KEY || '',
-  credentialId: process.env.NEXT_PUBLIC_CREDENTIAL_ID_GENDER || '',
+  verifierApiKey: process.env.NEXT_PUBLIC_VERIFIER_API_KEY || '',
+  verificationCredentialId: process.env.NEXT_PUBLIC_CREDENTIAL_ID_GENDER || '',
   programId: process.env.NEXT_PUBLIC_PROGRAM_ID || '',
+  
+  // Issuance config
+  issuerDid: process.env.NEXT_PUBLIC_ISSUER_DID || '',
+  issuerApiKey: process.env.NEXT_PUBLIC_ISSUER_API_KEY || '',
+  locationCredentialId: process.env.NEXT_PUBLIC_CREDENTIAL_ID_LOCATION || '',
 }; 
