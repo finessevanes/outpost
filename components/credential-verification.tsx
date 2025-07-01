@@ -5,6 +5,7 @@ import "@mocanetwork/air-credential-sdk/dist/style.css";
 import { BUILD_ENV } from "@mocanetwork/airkit";
 import { airService } from "@/lib/air-service";
 import { ENVIRONMENT_CONFIGS, CREDENTIAL_CONFIG } from "@/lib/credential-config";
+import { HoodMap } from "./hoodmap";
 
 export function CredentialVerification() {
   const [isLoading, setIsLoading] = useState(false);
@@ -115,6 +116,7 @@ export function CredentialVerification() {
       widgetRef.current.destroy();
       widgetRef.current = null;
     }
+    console.log("🔄 Verification reset");
   };
 
   // Cleanup on unmount
@@ -156,20 +158,33 @@ export function CredentialVerification() {
       )}
 
       {verificationResult && (
-        <div className="p-4 bg-green-50 border border-green-200 rounded-md">
-          <p className="text-green-800 font-medium mb-2">✅ Verification Complete</p>
-          <div className="text-sm space-y-1">
-            <p><span className="font-medium">Status:</span> Verification completed successfully</p>
-            <p><span className="font-medium">Results:</span> Check console for detailed output</p>
-          </div>
-          <details className="mt-3">
-            <summary className="cursor-pointer text-xs text-gray-600 hover:text-gray-800">
-              Show raw results
-            </summary>
-            <pre className="text-xs bg-white p-2 rounded border overflow-auto mt-2 max-h-40">
-              {JSON.stringify(verificationResult, null, 2)}
-            </pre>
-          </details>
+        <div>
+          {/* Check if user is verified as a woman (Compliant status) */}
+          {(verificationResult as any)?.status === "Compliant" ? (
+            <div className="space-y-4">
+              <div className="p-4 bg-green-50 border border-green-200 rounded-md">
+                <p className="text-green-800 font-medium mb-1">✅ Verification Complete</p>
+                <p className="text-green-700 text-sm">Welcome to the community! Access granted to HoodMap.</p>
+              </div>
+              <HoodMap />
+            </div>
+          ) : (
+            <div className="p-4 bg-green-50 border border-green-200 rounded-md">
+              <p className="text-green-800 font-medium mb-2">✅ Verification Complete</p>
+              <div className="text-sm space-y-1">
+                <p><span className="font-medium">Status:</span> Verification completed successfully</p>
+                <p><span className="font-medium">Results:</span> Check console for detailed output</p>
+              </div>
+              <details className="mt-3">
+                <summary className="cursor-pointer text-xs text-gray-600 hover:text-gray-800">
+                  Show raw results
+                </summary>
+                <pre className="text-xs bg-white p-2 rounded border overflow-auto mt-2 max-h-40">
+                  {JSON.stringify(verificationResult, null, 2)}
+                </pre>
+              </details>
+            </div>
+          )}
         </div>
       )}
     </div>
