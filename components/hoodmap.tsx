@@ -1,5 +1,9 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { ReviewModal } from './review-modal';
+import { AirCredentialWidget, type ClaimRequest } from '@mocanetwork/air-credential-sdk';
+import { BUILD_ENV } from '@mocanetwork/airkit';
+import { airService } from '@/lib/air-service';
+import { CREDENTIAL_CONFIG, ENVIRONMENT_CONFIGS } from '@/lib/credential-config';
 
 interface MapPin {
   id: number;
@@ -102,6 +106,8 @@ export function HoodMap() {
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
   const [reviewingPin, setReviewingPin] = useState<MapPin | null>(null);
   const [verifiedHotels, setVerifiedHotels] = useState<Set<number>>(new Set());
+  const [isIssuingCredential, setIsIssuingCredential] = useState(false);
+  const widgetRef = useRef<AirCredentialWidget | null>(null);
 
   const filteredPins = activeCategory === 'all' 
     ? mockMapData 
@@ -113,15 +119,136 @@ export function HoodMap() {
     console.log(`📱 Opening review modal for ${pin.title}`);
   };
 
-  const handleReviewSubmit = (reviewData: { image: File; travelType: string; location?: any }) => {
+  const getIssuerAuthToken = async (issuerDid: string, apiKey: string, apiUrl: string): Promise<string | null> => {
+    try {
+      const response = await fetch(`${apiUrl}/issuer/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          accept: "*/*",
+          "X-Test": "true",
+        },
+        body: JSON.stringify({
+          issuerDid: issuerDid,
+          authToken: apiKey,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Issuer API call failed with status: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (data.code === 80000000 && data.data && data.data.token) {
+        return data.data.token;
+      } else {
+        return null;
+      }
+    } catch (error) {
+      console.error("Error fetching issuer auth token:", error);
+      return null;
+    }
+  };
+
+  const issueLocationCredential = async (hotelName: string, locationData: any) => {
+    try {
+      setIsIssuingCredential(true);
+      console.log('🎫 Starting credential issuance process...');
+
+      // Get current build environment
+      const currentBuildEnv = BUILD_ENV.SANDBOX; // Use sandbox for development
+      const environmentConfig = ENVIRONMENT_CONFIGS[currentBuildEnv];
+
+      // Get issuer auth token
+      const issuerAuthToken = await getIssuerAuthToken(
+        CREDENTIAL_CONFIG.issuerDid,
+        CREDENTIAL_CONFIG.issuerApiKey,
+        environmentConfig.apiUrl
+      );
+
+      if (!issuerAuthToken) {
+        throw new Error('Failed to get issuer authentication token');
+      }
+
+      // Get partner token
+      const rp = await airService?.goToPartner(environmentConfig.widgetUrl).catch((err) => {
+        console.error("Error getting URL with token:", err);
+        throw err;
+      });
+
+      if (!rp?.urlWithToken) {
+        throw new Error('Failed to get partner token');
+      }
+
+      // Create credential subject matching the exact schema requirements
+      const credentialSubject: Record<string, string | boolean> = {
+        // Required field 1: hasBeenToLocation (boolean)
+        hasBeenToLocation: true,
+        
+        // Required field 2: id (string, URI format)
+        // This should be a unique identifier for this credential subject
+        id: `did:example:subject:${Date.now()}:${hotelName.replace(/\s+/g, '-').toLowerCase()}`
+      };
+
+      // Validate all required fields before creating claim request
+      if (!CREDENTIAL_CONFIG.issuerDid || !issuerAuthToken || !CREDENTIAL_CONFIG.locationCredentialId) {
+        throw new Error('Missing required issuer configuration');
+      }
+
+      // Create claim request with only the required fields
+      const claimRequest: ClaimRequest = {
+        process: "Issue",
+        issuerDid: CREDENTIAL_CONFIG.issuerDid,
+        issuerAuth: issuerAuthToken,
+        credentialId: CREDENTIAL_CONFIG.locationCredentialId,
+        credentialSubject: credentialSubject,
+      };
+
+      // Get partner ID from environment
+      const partnerId = process.env.NEXT_PUBLIC_AIR_PARTNER_ID || '';
+      
+      if (!partnerId) {
+        throw new Error('Partner ID is required for credential issuance');
+      }
+
+      // Create and configure the widget
+      widgetRef.current = new AirCredentialWidget(claimRequest, partnerId, {
+        endpoint: rp.urlWithToken,
+        airKitBuildEnv: currentBuildEnv,
+        theme: "light",
+        locale: "en" as any,
+      });
+
+      // Set up event handlers
+      widgetRef.current.on("issueCompleted", () => {
+        setIsIssuingCredential(false);
+        alert(`🎫 Success! You've been issued a "hasBeenToLocation" credential for ${hotelName}. Now you can write your review!`);
+      });
+
+      widgetRef.current.on("close", () => {
+        setIsIssuingCredential(false);
+      });
+
+      // Launch the widget
+      widgetRef.current.launch();
+
+    } catch (error) {
+      console.error('❌ Credential issuance failed:', error);
+      setIsIssuingCredential(false);
+      alert(`Failed to issue credential: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  const handleReviewSubmit = (reviewData: { image: File; travelType: string; location?: any; reviewText?: string; rating?: number }) => {
     console.log('📸 Review submitted:', {
       hotel: reviewingPin?.title,
       travelType: reviewData.travelType,
       hasImage: !!reviewData.image,
-      locationVerified: !!reviewData.location
+      locationVerified: !!reviewData.location,
+      reviewText: reviewData.reviewText,
+      rating: reviewData.rating
     });
-    
-    // TODO: Phase 3 - Trigger credential issuance here
     
     // Mark this hotel as verified
     if (reviewingPin) {
@@ -129,11 +256,24 @@ export function HoodMap() {
     }
     
     setReviewModalOpen(false);
+    const currentHotel = reviewingPin;
     setReviewingPin(null);
     
-    // Show success message (temporary)
-    alert(`✅ Review submitted for ${reviewingPin?.title}! You'll now see "You stayed here!" badge. Credential issuance coming in Phase 3.`);
+    // Show success message
+    const rating = reviewData.rating || 5;
+    const reviewLength = reviewData.reviewText?.length || 0;
+    alert(`✅ Review submitted for ${currentHotel?.title}! ${rating} stars, ${reviewLength} characters. You'll now see "You stayed here!" badge.`);
   };
+
+  // Cleanup widget on component unmount
+  useEffect(() => {
+    return () => {
+      if (widgetRef.current) {
+        widgetRef.current.destroy();
+        widgetRef.current = null;
+      }
+    };
+  }, []);
 
   return (
     <div className="bg-gray-900 text-white rounded-lg overflow-hidden animate-in fade-in-0 slide-in-from-bottom-4 duration-500">
@@ -241,6 +381,7 @@ export function HoodMap() {
           hotelId={reviewingPin.id}
           hotelCoordinates={{ lat: reviewingPin.lat, lng: reviewingPin.lng }}
           onSubmitReview={handleReviewSubmit}
+          onIssueCredential={issueLocationCredential}
         />
       )}
     </div>

@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 // @ts-ignore - exif-js doesn't have TypeScript definitions
 import EXIF from 'exif-js';
@@ -10,15 +10,18 @@ interface ReviewModalProps {
   hotelId: number;
   hotelCoordinates: { lat: number; lng: number };
   onSubmitReview: (data: ReviewData) => void;
+  onIssueCredential: (hotelName: string, locationData: any) => Promise<void>;
 }
 
 interface ReviewData {
   image: File;
   travelType: 'solo' | 'group' | 'mixed';
   location?: { lat: number; lng: number };
+  reviewText?: string;
+  rating?: number;
 }
 
-export function ReviewModal({ isOpen, onClose, hotelName, hotelId, hotelCoordinates, onSubmitReview }: ReviewModalProps) {
+export function ReviewModal({ isOpen, onClose, hotelName, hotelId, hotelCoordinates, onSubmitReview, onIssueCredential }: ReviewModalProps) {
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [travelType, setTravelType] = useState<'solo' | 'group' | 'mixed' | null>(null);
@@ -26,6 +29,11 @@ export function ReviewModal({ isOpen, onClose, hotelName, hotelId, hotelCoordina
   const [locationStatus, setLocationStatus] = useState<'checking' | 'verified' | 'failed' | null>(null);
   const [photoLocation, setPhotoLocation] = useState<{lat: number, lng: number} | null>(null);
   const [photoLocationError, setPhotoLocationError] = useState<string | null>(null);
+  const [credentialIssued, setCredentialIssued] = useState(false);
+  const [isIssuingCredential, setIsIssuingCredential] = useState(false);
+  const [showReviewWriting, setShowReviewWriting] = useState(false);
+  const [reviewText, setReviewText] = useState('');
+  const [rating, setRating] = useState<number>(5);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const extractGPSFromImage = (file: File): Promise<{lat: number, lng: number} | null> => {
@@ -117,6 +125,23 @@ export function ReviewModal({ isOpen, onClose, hotelName, hotelId, hotelCoordina
     }
   }, [hotelCoordinates, hotelName]);
 
+  // Reset all states when modal opens/closes
+  useEffect(() => {
+    if (!isOpen) {
+      setSelectedImage(null);
+      setImagePreview(null);
+      setTravelType(null);
+      setLocationStatus(null);
+      setPhotoLocation(null);
+      setPhotoLocationError(null);
+      setCredentialIssued(false);
+      setIsIssuingCredential(false);
+      setShowReviewWriting(false);
+      setReviewText('');
+      setRating(5);
+    }
+  }, [isOpen]);
+
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -135,6 +160,30 @@ export function ReviewModal({ isOpen, onClose, hotelName, hotelId, hotelCoordina
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
   };
+
+  const handleGetVerified = async () => {
+    if (credentialIssued || isIssuingCredential) return;
+
+    try {
+      setIsIssuingCredential(true);
+      console.log('🎫 User clicked Get Verified - issuing credential...');
+      
+      await onIssueCredential(hotelName, photoLocation);
+      setCredentialIssued(true);
+      setShowReviewWriting(true); // Show review writing modal after credential success
+      
+      console.log('✅ Credential issued successfully! Now showing review writing modal.');
+    } catch (error) {
+      console.error('❌ Failed to issue credential:', error);
+      alert('Failed to issue credential. Please try again.');
+    } finally {
+      setIsIssuingCredential(false);
+    }
+  };
+
+  // Check if ready for verification (location verified + travel type selected)
+  const isReadyForVerification = (photoLocation && !photoLocationError) || locationStatus === 'verified';
+  const canGetVerified = isReadyForVerification && travelType && !credentialIssued;
 
   const checkGeolocation = async (): Promise<boolean> => {
     setLocationStatus('checking');
@@ -208,28 +257,21 @@ export function ReviewModal({ isOpen, onClose, hotelName, hotelId, hotelCoordina
   };
 
   const handleSubmit = async () => {
-    if (!selectedImage || !travelType) {
-      alert('Please select an image and travel type');
+    if (!selectedImage || !travelType || !credentialIssued || !reviewText.trim()) {
+      alert('Please complete all steps including writing your review');
       return;
     }
 
     setIsSubmitting(true);
 
     try {
-      // Check geolocation
-      const locationVerified = await checkGeolocation();
-      
-      if (!locationVerified) {
-        alert('We couldn\'t verify your location at this hotel. Please make sure you\'re within 100m of the property or upload a photo taken at the location.');
-        setIsSubmitting(false);
-        return;
-      }
-
-      // Submit review data
+      // Submit review data including the written review
       const reviewData: ReviewData = {
         image: selectedImage,
         travelType,
-        location: locationStatus === 'verified' ? { lat: -8.6480, lng: 115.1379 } : undefined
+        location: photoLocation || { lat: hotelCoordinates.lat, lng: hotelCoordinates.lng },
+        reviewText: reviewText.trim(),
+        rating: rating
       };
 
       onSubmitReview(reviewData);
@@ -248,7 +290,7 @@ export function ReviewModal({ isOpen, onClose, hotelName, hotelId, hotelCoordina
       <div className="bg-white rounded-t-3xl w-full max-w-md max-h-[90vh] overflow-y-auto animate-in slide-in-from-bottom-4 duration-300">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b">
-          <h2 className="text-xl font-semibold">📸 Review {hotelName}</h2>
+          <h2 className="text-xl font-semibold text-black">📸 Review {hotelName}</h2>
           <button 
             onClick={onClose}
             className="text-gray-500 hover:text-gray-700 text-2xl"
@@ -260,7 +302,7 @@ export function ReviewModal({ isOpen, onClose, hotelName, hotelId, hotelCoordina
         <div className="p-6 space-y-6">
           {/* Image Upload */}
           <div className="space-y-3">
-            <label className="block text-sm font-medium text-gray-700">
+            <label className="block text-sm font-medium text-black">
               Upload a photo from your stay
             </label>
             
@@ -272,8 +314,8 @@ export function ReviewModal({ isOpen, onClose, hotelName, hotelId, hotelCoordina
                 onClick={() => fileInputRef.current?.click()}
               >
                 <div className="text-4xl mb-2">📷</div>
-                <p className="text-gray-600 mb-2">Tap to select or drag & drop</p>
-                <p className="text-xs text-gray-500">JPEG, PNG supported</p>
+                <p className="text-black mb-2">Tap to select or drag & drop</p>
+                <p className="text-xs text-black">JPEG, PNG supported</p>
               </div>
             ) : (
               <div className="relative">
@@ -289,6 +331,11 @@ export function ReviewModal({ isOpen, onClose, hotelName, hotelId, hotelCoordina
                      setPhotoLocation(null);
                      setPhotoLocationError(null);
                      setLocationStatus(null);
+                     setCredentialIssued(false);
+                     setIsIssuingCredential(false);
+                     setShowReviewWriting(false);
+                     setReviewText('');
+                     setRating(5);
                    }}
                    className="absolute top-2 right-2 bg-red-500 text-white rounded-full w-8 h-8 flex items-center justify-center hover:bg-red-600"
                  >
@@ -308,7 +355,7 @@ export function ReviewModal({ isOpen, onClose, hotelName, hotelId, hotelCoordina
 
           {/* Travel Type */}
           <div className="space-y-3">
-            <label className="block text-sm font-medium text-gray-700">
+            <label className="block text-sm font-medium text-black">
               How did you travel?
             </label>
             <div className="grid grid-cols-3 gap-3">
@@ -326,8 +373,8 @@ export function ReviewModal({ isOpen, onClose, hotelName, hotelId, hotelCoordina
                       : 'border-gray-200 hover:border-gray-300'
                   }`}
                 >
-                  <div className="text-sm font-medium">{option.label}</div>
-                  <div className="text-xs text-gray-500 mt-1">{option.desc}</div>
+                  <div className="text-sm font-medium text-black">{option.label}</div>
+                  <div className="text-xs text-black mt-1">{option.desc}</div>
                 </button>
               ))}
             </div>
@@ -387,17 +434,145 @@ export function ReviewModal({ isOpen, onClose, hotelName, hotelId, hotelCoordina
              </div>
            )}
 
-                                {/* Submit Button */}
-           <Button
-             onClick={handleSubmit}
-             disabled={!selectedImage || !travelType || isSubmitting}
-             className="w-full py-3 text-lg font-medium"
-           >
-              {isSubmitting ? 'Submitting Review...' : 
-               photoLocationError ? 'Submit Review (will verify current location)' :
-               photoLocation ? 'Submit Review & Get Verified' : 
-               'Submit Review (will verify current location)'}
-           </Button>
+           {/* Progress Steps */}
+           <div className="space-y-3">
+             {/* Step 1: Photo Upload */}
+             <div className={`flex items-center gap-3 p-3 rounded-lg ${
+               selectedImage ? 'bg-green-50 border border-green-200' : 'bg-gray-50 border border-gray-200'
+             }`}>
+               <span className="text-lg">{selectedImage ? '✅' : '1️⃣'}</span>
+               <div className="text-sm">
+                 <div className="font-medium text-black">Upload photo from your stay</div>
+                 <div className="text-black">{selectedImage ? 'Photo uploaded ✓' : 'Please upload a photo'}</div>
+               </div>
+             </div>
+
+             {/* Step 2: Travel Type */}
+             <div className={`flex items-center gap-3 p-3 rounded-lg ${
+               travelType ? 'bg-green-50 border border-green-200' : 'bg-gray-50 border border-gray-200'
+             }`}>
+               <span className="text-lg">{travelType ? '✅' : '2️⃣'}</span>
+               <div className="text-sm">
+                 <div className="font-medium text-black">Select travel type</div>
+                 <div className="text-black">{travelType ? `${travelType} travel selected ✓` : 'How did you travel?'}</div>
+               </div>
+             </div>
+
+             {/* Step 3: Get Verified */}
+             <div className={`flex items-center gap-3 p-3 rounded-lg ${
+               credentialIssued ? 'bg-green-50 border border-green-200' : 
+               canGetVerified ? 'bg-blue-50 border border-blue-200' : 
+               'bg-gray-50 border border-gray-200'
+             }`}>
+               <span className="text-lg">
+                 {credentialIssued ? '✅' : isIssuingCredential ? '🔄' : canGetVerified ? '3️⃣' : '3️⃣'}
+               </span>
+               <div className="text-sm">
+                 <div className="font-medium text-black">Get verified credential</div>
+                 <div className="text-black">
+                   {credentialIssued ? 'Credential issued ✓' :
+                    isIssuingCredential ? 'Issuing credential...' :
+                    canGetVerified ? 'Ready to verify!' :
+                    'Complete steps 1 & 2 first'}
+                 </div>
+               </div>
+             </div>
+
+             {/* Step 4: Write Review */}
+             <div className={`flex items-center gap-3 p-3 rounded-lg ${
+               showReviewWriting ? 'bg-blue-50 border border-blue-200' : 
+               credentialIssued ? 'bg-green-50 border border-green-200' : 
+               'bg-gray-50 border border-gray-200'
+             }`}>
+               <span className="text-lg">
+                 {reviewText.trim() ? '✅' : showReviewWriting ? '4️⃣' : credentialIssued ? '4️⃣' : '4️⃣'}
+               </span>
+               <div className="text-sm">
+                 <div className="font-medium text-black">Write your review</div>
+                 <div className="text-black">
+                   {reviewText.trim() ? 'Review written ✓' :
+                    showReviewWriting ? 'Write your review below!' :
+                    credentialIssued ? 'Ready to write review!' :
+                    'Get verified first'}
+                 </div>
+               </div>
+             </div>
+           </div>
+
+           {/* Review Writing Section - Shows after credential issued */}
+           {showReviewWriting && (
+             <div className="space-y-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+               <h3 className="text-lg font-semibold text-black">✅ Write Your Review</h3>
+               <p className="text-sm text-black">Great! You're verified. Now share your experience at {hotelName}:</p>
+               
+               {/* Rating */}
+               <div className="space-y-2">
+                 <label className="block text-sm font-medium text-black">Rating</label>
+                 <div className="flex gap-1">
+                   {[1, 2, 3, 4, 5].map((star) => (
+                     <button
+                       key={star}
+                       onClick={() => setRating(star)}
+                       className={`text-2xl transition-colors ${
+                         star <= rating ? 'text-yellow-500' : 'text-gray-300'
+                       }`}
+                     >
+                       ⭐
+                     </button>
+                   ))}
+                 </div>
+               </div>
+
+               {/* Review Text */}
+               <div className="space-y-2">
+                 <label className="block text-sm font-medium text-black">
+                   Your Review
+                 </label>
+                 <textarea
+                   value={reviewText}
+                   onChange={(e) => setReviewText(e.target.value)}
+                   placeholder="Share your experience... What did you like? Any tips for other travelers?"
+                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-h-[100px] resize-none text-black"
+                   maxLength={500}
+                 />
+                 <div className="text-xs text-black text-right">
+                   {reviewText.length}/500 characters
+                 </div>
+               </div>
+             </div>
+           )}
+
+           {/* Get Verified Button (Step 3) */}
+           {canGetVerified && (
+             <Button
+               onClick={handleGetVerified}
+               disabled={isIssuingCredential}
+               className="w-full py-3 text-lg font-medium bg-blue-600 hover:bg-blue-700"
+             >
+               {isIssuingCredential ? '🔄 Getting Verified...' : '🎫 Get Verified'}
+             </Button>
+           )}
+
+           {/* Write Review Button - Shows after credential issued but before review written */}
+           {credentialIssued && !showReviewWriting && (
+             <Button
+               onClick={() => setShowReviewWriting(true)}
+               className="w-full py-3 text-lg font-medium bg-blue-600 hover:bg-blue-700"
+             >
+               ✍️ Write Review
+             </Button>
+           )}
+
+           {/* Submit Review Button - Shows only after review is written */}
+           {showReviewWriting && reviewText.trim() && (
+             <Button
+               onClick={handleSubmit}
+               disabled={isSubmitting}
+               className="w-full py-3 text-lg font-medium bg-green-600 hover:bg-green-700"
+             >
+               {isSubmitting ? 'Submitting Review...' : '📝 Submit Review'}
+             </Button>
+           )}
         </div>
       </div>
     </div>
